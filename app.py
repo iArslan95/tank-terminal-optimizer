@@ -263,19 +263,36 @@ with st.sidebar:
     st.caption("Operations Research demo — synthetic data, real mathematics.")
 
     st.markdown("#### Scenario")
-    n_vessels = st.slider("Vessels calling this week", 3, 20, 10)
-    n_berths = st.slider("Berths (jetties)", 2, 6, 3)
+    n_vessels = st.slider("Vessels calling this week", 3, 20, 10,
+                          help="How many tankers arrive this week. More vessels = more "
+                               "competition for berths and tanks, so more to optimize.")
+    n_berths = st.slider("Berths (jetties)", 2, 6, 3,
+                         help="How many jetties the terminal has. One vessel at a time "
+                              "per jetty; the large sea jetties pump fastest, the "
+                              "coaster/barge berths only take small vessels.")
     congestion = st.slider("Arrival congestion", 0.0, 1.0, 0.9, 0.05,
-                           help="Higher = ETAs bunch together → more queueing pressure.")
+                           help="How bunched-up the arrivals are. Higher = ETAs cluster "
+                                "in the same days → queues at the berths → more for the "
+                                "optimizer to win.")
 
     with st.expander("⚙️ Advanced"):
         seed = st.number_input("Random seed", 1, 999, DEFAULT_SEED,
                                help="Same seed = same scenario. Change it for a fresh week.")
-        n_tanks = st.slider("Storage tanks", 8, 36, 14)
-        horizon_days = st.slider("Planning horizon (days)", 3, 10, 5)
+        n_tanks = st.slider("Storage tanks", 8, 36, 14,
+                            help="How many storage tanks the terminal has. More tanks = "
+                                 "more compatible options per vessel, fewer forced "
+                                 "cleanings.")
+        horizon_days = st.slider("Planning horizon (days)", 3, 10, 5,
+                                 help="Length of the planning window. Arrivals land in "
+                                      "the early part of it (see Arrival congestion).")
         dem_scale = st.slider("Demurrage level (×)", 0.5, 2.0, 1.0, 0.1,
-                              help="Waiting cost per day at 1.0×: S € 9k · M € 18k · L € 30k.")
-        time_limit = st.slider("CP-SAT time limit (s)", 2, 30, 10)
+                              help="Multiplier on the waiting cost per day. At 1.0×: "
+                                   "small vessels € 9k, medium € 18k, large € 30k per "
+                                   "day at anchorage.")
+        time_limit = st.slider("CP-SAT time limit (s)", 2, 30, 10,
+                               help="Maximum seconds the solver may search. OPTIMAL = "
+                                    "proven best plan; if time runs out you get the "
+                                    "best plan found so far (FEASIBLE).")
 
 scenario_preview = build_scenario(seed, n_vessels, n_berths, n_tanks,
                                   horizon_days, congestion, dem_scale)
@@ -284,8 +301,11 @@ vessel_names = [v.name for v in scenario_preview.vessels]
 with st.sidebar:
     st.markdown("#### What-if disruption")
     pick = st.selectbox("Delayed vessel", ["— none —"] + vessel_names,
-                        help="Simulate a late arrival and watch the plan re-optimize.")
-    delay_h = st.slider("Delay (hours)", 2, 36, 12) if pick != "— none —" else 0
+                        help="Pick a vessel that arrives late (weather, port congestion) "
+                             "and see what re-planning is worth in euros.")
+    delay_h = st.slider("Delay (hours)", 2, 36, 12,
+                        help="How many hours later than nominated the vessel arrives "
+                             "at the anchorage.") if pick != "— none —" else 0
 
 disrupted = None if pick == "— none —" else pick
 scenario, opt, base, opt0, frozen = solve_all(
