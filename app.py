@@ -17,6 +17,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+import assistant
 from optimizer import baseline, data, kpis, model
 
 st.set_page_config(
@@ -71,6 +72,14 @@ CSS = """
   border-color: #22d3ee; color: #f0f9ff;
 }
 .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] {display: none;}
+/* Plan Assistant panel */
+.chat-head {font-weight: 700; font-size: 1.05rem; color: #7dd3fc; margin-top: 4px;}
+.stButton button {
+  font-size: 0.85rem; text-align: left; width: 100%;
+  background: #12233c; border: 1px solid #2a4a73; border-radius: 10px;
+  color: #cbd5e1; padding: 6px 12px;
+}
+.stButton button:hover {border-color: #22d3ee; color: #e0f2fe;}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -257,6 +266,61 @@ def schedule_table(entries):
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
 
+def render_chat(scenario, opt, base, k_opt, k_base, settings, disruption):
+    """Always-visible assistant panel, grounded in the live plan data."""
+    st.markdown('<div class="chat-head">💬 Plan Assistant</div>', unsafe_allow_html=True)
+    st.caption("Grounded in the live schedule — ask why, what, and what-if.")
+    history = st.session_state.setdefault("chat_history", [])
+
+    box = st.container(height=460, border=True)
+    with box:
+        if not history:
+            st.markdown(
+                "<small style='color:#94a3b8'>I can explain every number on this "
+                "page — the schedule, the savings, the constraints. Try a "
+                "suggestion below or ask your own question.</small>",
+                unsafe_allow_html=True,
+            )
+        for m in history:
+            with st.chat_message(m["role"], avatar="⚓" if m["role"] == "assistant" else None):
+                st.markdown(m["content"])
+
+    api_key = assistant.get_api_key()
+    if not api_key:
+        st.info("Add `GROQ_API_KEY` to `.streamlit/secrets.toml` (locally) or to "
+                "the app's Secrets on Streamlit Cloud to enable the assistant.")
+        return
+
+    n_user = sum(1 for m in history if m["role"] == "user")
+    if n_user >= assistant.MAX_USER_MESSAGES:
+        st.warning("Chat limit reached for this session — tweak the scenario or refresh.")
+        return
+
+    if not history:
+        for i, q in enumerate(assistant.suggested_questions(opt["entries"], k_opt, k_base)):
+            if st.button(q, key=f"suggestion_{i}"):
+                st.session_state["pending_question"] = q
+
+    user_msg = st.chat_input("Ask about this plan…")
+    user_msg = user_msg or st.session_state.pop("pending_question", None)
+    if not user_msg:
+        return
+
+    history.append({"role": "user", "content": user_msg})
+    with box:
+        with st.chat_message("user"):
+            st.markdown(user_msg)
+        with st.chat_message("assistant", avatar="⚓"):
+            context = assistant.build_context(
+                scenario, opt, base, k_opt, k_base, T0, settings, disruption)
+            try:
+                reply = st.write_stream(assistant.stream_reply(api_key, context, history))
+            except Exception as exc:
+                reply = f"⚠️ The assistant hit an error: {exc}"
+                st.markdown(reply)
+    history.append({"role": "assistant", "content": str(reply)})
+
+
 # ----------------------------------------------------------------------------- sidebar
 with st.sidebar:
     st.markdown("### ⚓ PortOpt")
@@ -394,9 +458,12 @@ else:
     st.info("FCFS happens to be optimal for this scenario — raise **arrival congestion** "
             "or add vessels to see the optimizer earn its keep.")
 
-tab_plan, tab_vs, tab_data, tab_how = st.tabs(
-    ["🗓️ The plan", "⚖️ Optimizer vs. human", "📦 Scenario", "🧠 How it works"]
-)
+main_col, chat_col = st.columns([2.3, 1], gap="medium")
+
+with main_col:
+    tab_plan, tab_vs, tab_data, tab_how = st.tabs(
+        ["🗓️ The plan", "⚖️ Optimizer vs. human", "📦 Scenario", "🧠 How it works"]
+    )
 
 # ----------------------------------------------------------------------------- plan tab
 with tab_plan:
@@ -593,6 +660,21 @@ model.Minimize(sum(wait * demurrage_rate) + sum(y * cleaning_cost))
 - **Planner-in-the-loop UI** — lock assignments, compare scenarios, and always show *why* the plan is optimal.
         """
     )
+
+with chat_col:
+    chat_settings = {
+        "seed": int(seed), "vessels": n_vessels, "berths": n_berths,
+        "tanks": n_tanks, "horizon_days": horizon_days,
+        "congestion": congestion, "demurrage_scale": dem_scale,
+    }
+    disruption_info = None
+    if disrupted and opt0 and frozen:
+        disruption_info = {
+            "vessel": disrupted, "delay_h": delay_h,
+            "original": k0["total"], "frozen": k_frozen["total"],
+            "reoptimized": k_opt["total"],
+        }
+    render_chat(scenario, opt, base, k_opt, k_base, chat_settings, disruption_info)
 
 st.markdown(
     """<div class="footer">PortOpt · OR-Tools CP-SAT + Streamlit · all data synthetic ·

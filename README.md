@@ -39,6 +39,9 @@ it decided and why — the essence of a decision support system.
   the original optimum, stubbornly executing the old schedule, and the
   re-optimized plan. The gap between the last two is the euro value of
   re-planning: the core loop of operational decision support.
+- **Plan Assistant (LLM chat)**: an always-visible side panel where you can ask
+  *why* — "Why does Bow Clipper wait 10.9 h?" — and get answers grounded in the
+  live schedule. The solver proves, the LLM explains.
 - **Explains itself**: a model tab with the MILP-style formulation, the CP-SAT
   code, solver telemetry and a production roadmap.
 
@@ -77,6 +80,24 @@ Sanity-check the optimizer across 12 random scenarios:
 python scripts/selftest.py
 ```
 
+## Plan Assistant (optional LLM chat)
+
+The chat panel is powered by **Groq** (Llama 3.3 70B, free tier) through plain
+context injection: every question is answered with a fresh snapshot of the
+current scenario, the optimized plan, the FCFS baseline and any active
+disruption in the system prompt — no RAG, no database, nothing stored.
+
+Setup (the app works fine without it; the panel simply explains how to enable):
+
+1. Create a free API key at [console.groq.com/keys](https://console.groq.com/keys).
+2. Locally: copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`
+   and paste your key. The real file is **gitignored — never commit it**.
+3. Streamlit Cloud: paste the same line under **App → Settings → Secrets**.
+
+Guardrails for a public deployment: per-session message cap, short history
+window, low `max_tokens`, and answers are instructed to stay grounded in the
+data on screen. Verify the full pipeline with `python scripts/chat_probe.py`.
+
 ## Deploy (free, shareable link)
 
 1. Push this repo to GitHub (public).
@@ -87,7 +108,8 @@ python scripts/selftest.py
 ## Project structure
 
 ```
-app.py                  Streamlit UI (charts, KPIs, what-if controls)
+app.py                  Streamlit UI (charts, KPIs, what-if controls, chat panel)
+assistant.py            Plan Assistant: grounded context builder + Groq client
 optimizer/
   data.py               synthetic scenario generator (vessels, berths, tanks)
   model.py              CP-SAT model: berth + tank + sequencing, cost objective
@@ -96,6 +118,7 @@ optimizer/
 scripts/selftest.py     multi-seed smoke test (optimizer never loses to FCFS,
                         re-optimizing never loses to freezing the old plan)
 scripts/ui_test.py      headless UI test via streamlit.testing (AppTest)
+scripts/chat_probe.py   end-to-end Plan Assistant test (needs a Groq key)
 ```
 
 ## From demo to production

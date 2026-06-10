@@ -21,6 +21,7 @@ def main():
     at.run()
     assert not at.exception, f"app raised on default run: {at.exception}"
     assert len(at.metric) == 3, f"expected 3 KPI metrics, got {len(at.metric)}"
+    assert len(at.chat_input) == 1, "Plan Assistant chat input should render"
 
     box = at.selectbox[0]
     vessel = next(o for o in box.options if o != "— none —")
