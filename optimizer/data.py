@@ -1,8 +1,12 @@
-"""Synthetic scenario generation for a liquid-bulk tank terminal.
+"""Synthetic scenario generation for a Rotterdam Botlek-style chemical
+tank terminal.
 
-Everything here is fake but realistic: vessel sizes, pump rates, tank
-capacities and product families are in the right order of magnitude for a
-Rotterdam-style terminal. No real terminal or customer data is used.
+Everything here is synthetic but realistic in magnitude: vessel classes,
+pump rates, tank capacities, product slate (chemicals, aromatics, biofuels)
+and demurrage rates resemble a chemical terminal in the Rotterdam Botlek
+area. Vessel names are real chemical-tanker names from fleets that call at
+Rotterdam, used as flavour only — no real schedules, terminals or customer
+data are involved.
 """
 from __future__ import annotations
 
@@ -18,17 +22,19 @@ SETUP_MIN = 120  # mooring, hose connection, paperwork — fixed per port call
 @dataclass(frozen=True)
 class Product:
     name: str
-    family: str  # CPP (clean petroleum products) | CHEM | BIO
+    family: str  # CPP (clean petroleum & aromatics) | CHEM | BIO
     color: str   # chart color
 
 
 PRODUCTS = (
-    Product("Gasoline 95", "CPP", "#f59e0b"),
-    Product("Diesel EN590", "CPP", "#fb7185"),
-    Product("Jet A-1", "CPP", "#a78bfa"),
-    Product("Naphtha", "CPP", "#facc15"),
+    Product("Xylenes", "CPP", "#f59e0b"),
+    Product("Toluene", "CPP", "#facc15"),
+    Product("Pygas", "CPP", "#fb7185"),
     Product("Methanol", "CHEM", "#34d399"),
     Product("MEG", "CHEM", "#2dd4bf"),
+    Product("Styrene", "CHEM", "#a78bfa"),
+    Product("Acrylonitrile", "CHEM", "#f472b6"),
+    Product("Caustic soda 50%", "CHEM", "#60a5fa"),
     Product("Ethanol", "BIO", "#22d3ee"),
     Product("UCOME biodiesel", "BIO", "#4ade80"),
 )
@@ -43,11 +49,23 @@ LININGS = {
 SIZE_ORDER = {"S": 0, "M": 1, "L": 2}
 DEMURRAGE_PER_DAY = {"S": 9_000.0, "M": 18_000.0, "L": 30_000.0}  # EUR/day waiting
 
-VESSEL_NAMES = (
-    "MT Aurora", "MT Blue Heron", "MT Cygnus", "MT Delta Star",
-    "MT Eemshaven", "MT Falcon", "MT Gannet", "MT Horizon",
-    "MT IJssel", "MT Jade", "MT Kingfisher", "MT Lyra",
-)
+# Real chemical-tanker names (Stolt, Odfjell "Bow", Essberger fleets) that
+# call at Rotterdam, bucketed by realistic vessel class. Flavour only.
+NAME_POOLS = {
+    "S": (
+        "Liselotte Essberger", "Annette Essberger", "Christian Essberger",
+        "Patricia Essberger", "Stolt Sandpiper", "Stolt Auk",
+    ),
+    "M": (
+        "Stolt Concept", "Stolt Effort", "Stolt Confidence", "Stolt Creativity",
+        "Bow Compass", "Bow Cardinal", "Bow Clipper", "Bow Flora",
+    ),
+    "L": (
+        "Stolt Tenacity", "Stolt Innovation", "Stolt Achievement",
+        "Bow Sky", "Bow Sun", "Bow Sirius", "Bow Orion", "Bow Aquarius",
+    ),
+}
+ALL_NAMES = NAME_POOLS["S"] + NAME_POOLS["M"] + NAME_POOLS["L"]
 
 
 @dataclass(frozen=True)
@@ -61,10 +79,12 @@ class Berth:
 
 
 BERTH_TEMPLATES = (
-    Berth("Jetty 1", "L", 1_400),
-    Berth("Jetty 2", "L", 1_100),
-    Berth("Jetty 3", "M", 900),
-    Berth("Jetty 4", "S", 700),
+    Berth("Jetty 1 (sea)", "L", 1_300),
+    Berth("Jetty 2 (sea)", "L", 1_100),
+    Berth("Jetty 3 (sea)", "M", 900),
+    Berth("Jetty 4 (coaster)", "S", 700),
+    Berth("Barge berth 1", "S", 500),
+    Berth("Barge berth 2", "S", 450),
 )
 
 
@@ -196,6 +216,15 @@ def _size_for(volume: int) -> str:
     return "L"
 
 
+def _pick_name(rng: random.Random, size: str, used: set) -> str:
+    pool = [n for n in NAME_POOLS[size] if n not in used]
+    if not pool:  # class pool exhausted — borrow any free name
+        pool = [n for n in ALL_NAMES if n not in used]
+    name = rng.choice(pool)
+    used.add(name)
+    return name
+
+
 def _try_generate(rng, n_vessels, n_berths, n_tanks, horizon_days, congestion, demurrage_scale):
     horizon_min = horizon_days * 24 * MIN_PER_HOUR
     berths = tuple(BERTH_TEMPLATES[:n_berths])
@@ -204,10 +233,10 @@ def _try_generate(rng, n_vessels, n_berths, n_tanks, horizon_days, congestion, d
     # ETAs bunch into the front of the horizon as congestion rises.
     window = horizon_min * max(0.15, 1.0 - 0.85 * congestion)
 
-    names = rng.sample(VESSEL_NAMES, k=n_vessels)
     claimed = set()
+    used_names = set()
     vessels = []
-    for name in names:
+    for _ in range(n_vessels):
         want_export = rng.random() >= 0.55
         exportable = [
             t for t in tanks
@@ -249,7 +278,7 @@ def _try_generate(rng, n_vessels, n_berths, n_tanks, horizon_days, congestion, d
         size = _size_for(volume)
         vessels.append(
             Vessel(
-                name=name,
+                name=_pick_name(rng, size, used_names),
                 size=size,
                 operation=operation,
                 product=product,
@@ -274,7 +303,7 @@ def generate(seed, n_vessels, n_berths, n_tanks, horizon_days=5, congestion=0.6,
     """Generate a feasible scenario. Each vessel is constructed around a
     distinct compatible tank, so a feasible vessel-to-tank matching always
     exists; the optimizer is free to pick a different (cheaper) one."""
-    n_vessels = min(n_vessels, n_tanks, len(VESSEL_NAMES))
+    n_vessels = min(n_vessels, n_tanks, len(ALL_NAMES))
     for attempt in range(40):
         rng = random.Random(seed * 1_000 + attempt)
         scenario = _try_generate(

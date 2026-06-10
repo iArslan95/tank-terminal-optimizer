@@ -7,6 +7,8 @@ This is the benchmark the CP-SAT plan is compared against.
 """
 from __future__ import annotations
 
+from collections import defaultdict
+
 from .data import Scenario, service_minutes, tank_options
 from .model import _entry
 
@@ -69,3 +71,32 @@ def fcfs(scenario: Scenario) -> dict:
         entries.append(_entry(v, berth, tank, needs_clean, s))
 
     return {"status": "FCFS", "entries": entries}
+
+
+def freeze_replan(scenario: Scenario, original_entries) -> dict:
+    """Execute a previously made plan on a (disrupted) scenario without
+    re-optimizing: every vessel keeps its berth, tank and position in the
+    berth's service order; only the clock shifts for the new ETAs. This is
+    what happens when the planner sticks to the old schedule — the
+    re-optimized plan is benchmarked against it."""
+    vessel_by_name = {v.name: v for v in scenario.vessels}
+    berth_by_name = {b.name: b for b in scenario.berths}
+    tank_by_name = {t.name: t for t in scenario.tanks}
+
+    per_berth = defaultdict(list)
+    for e in sorted(original_entries, key=lambda e: e["start"]):
+        per_berth[e["berth"]].append(e)
+
+    entries = []
+    for berth_name, planned in per_berth.items():
+        berth = berth_by_name[berth_name]
+        free = 0
+        for e in planned:
+            vessel = vessel_by_name[e["vessel"]]
+            tank = tank_by_name[e["tank"]]
+            ready = tank.clean_hours * 60 if e["clean"] else 0
+            start = max(vessel.eta_min, ready, free)
+            free = start + service_minutes(vessel, berth)
+            entries.append(_entry(vessel, berth, tank, e["clean"], start))
+
+    return {"status": "FROZEN", "entries": entries}

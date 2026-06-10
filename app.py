@@ -25,7 +25,7 @@ st.set_page_config(
     layout="wide",
 )
 
-DEFAULT_SEED = 8
+DEFAULT_SEED = 5
 WAIT_KIND = "Waiting at anchorage"
 WAIT_COLOR = "#64748b"
 PRODUCT_COLORS = {p.name: p.color for p in data.PRODUCTS}
@@ -59,6 +59,18 @@ CSS = """
 .orcard h4 {margin: 0 0 8px; color: #7dd3fc;}
 .orcard p {margin: 0; color: #cbd5e1; font-size: 0.92rem;}
 .footer {color: #64748b; font-size: 0.85rem; margin-top: 28px;}
+/* Tabs styled as clearly clickable buttons */
+.stTabs [data-baseweb="tab-list"] {gap: 10px; padding: 2px 0 10px;}
+.stTabs [data-baseweb="tab"] {
+  background: #12233c; border: 1px solid #2a4a73; border-radius: 12px;
+  padding: 10px 20px; font-weight: 600; font-size: 1.0rem; color: #cbd5e1;
+}
+.stTabs [data-baseweb="tab"]:hover {border-color: #22d3ee; color: #e0f2fe;}
+.stTabs [aria-selected="true"] {
+  background: linear-gradient(135deg, #0e7490, #155e75);
+  border-color: #22d3ee; color: #f0f9ff;
+}
+.stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] {display: none;}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -84,11 +96,18 @@ def build_scenario(seed, nv, nb, nt, hd, cong, dem_scale):
 
 @st.cache_data(show_spinner="Solving with CP-SAT…")
 def solve_all(seed, nv, nb, nt, hd, cong, dem_scale, disrupted, delay_h, time_limit):
+    """Solve the scenario. With a disruption active, also return the original
+    (undisrupted) optimum and the 'frozen' plan — the old schedule executed
+    against the new ETAs — so the UI can show the value of re-planning."""
     scenario = data.generate(seed, nv, nb, nt, horizon_days=hd, congestion=cong,
                              demurrage_scale=dem_scale)
-    if disrupted:
-        scenario = data.delay_vessel(scenario, disrupted, int(delay_h * 60))
-    return scenario, model.solve(scenario, time_limit), baseline.fcfs(scenario)
+    opt0 = model.solve(scenario, time_limit)
+    if not disrupted:
+        return scenario, opt0, baseline.fcfs(scenario), None, None
+    disturbed = data.delay_vessel(scenario, disrupted, int(delay_h * 60))
+    opt = model.solve(disturbed, time_limit)
+    frozen = baseline.freeze_replan(disturbed, opt0["entries"]) if opt0["entries"] else None
+    return disturbed, opt, baseline.fcfs(disturbed), opt0, frozen
 
 
 def style_fig(fig, height):
@@ -235,7 +254,7 @@ def schedule_table(entries):
         }
         for e in sorted(entries, key=lambda e: e["start"])
     ]
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
 
 # ----------------------------------------------------------------------------- sidebar
@@ -244,18 +263,19 @@ with st.sidebar:
     st.caption("Operations Research demo — synthetic data, real mathematics.")
 
     st.markdown("#### Scenario")
-    seed = st.number_input("Random seed", 1, 999, DEFAULT_SEED,
-                           help="Same seed = same scenario. Change it for a fresh week.")
-    n_vessels = st.slider("Vessels calling this week", 3, 12, 10)
-    n_berths = st.slider("Berths (jetties)", 2, 4, 3)
-    n_tanks = st.slider("Storage tanks", 8, 24, 14)
-    horizon_days = st.slider("Planning horizon (days)", 3, 10, 5)
+    n_vessels = st.slider("Vessels calling this week", 3, 20, 10)
+    n_berths = st.slider("Berths (jetties)", 2, 6, 3)
     congestion = st.slider("Arrival congestion", 0.0, 1.0, 0.9, 0.05,
                            help="Higher = ETAs bunch together → more queueing pressure.")
 
-    st.markdown("#### Economics")
-    dem_scale = st.slider("Demurrage level (×)", 0.5, 2.0, 1.0, 0.1,
-                          help="Waiting cost per day at 1.0×: S € 9k · M € 18k · L € 30k.")
+    with st.expander("⚙️ Advanced"):
+        seed = st.number_input("Random seed", 1, 999, DEFAULT_SEED,
+                               help="Same seed = same scenario. Change it for a fresh week.")
+        n_tanks = st.slider("Storage tanks", 8, 36, 14)
+        horizon_days = st.slider("Planning horizon (days)", 3, 10, 5)
+        dem_scale = st.slider("Demurrage level (×)", 0.5, 2.0, 1.0, 0.1,
+                              help="Waiting cost per day at 1.0×: S € 9k · M € 18k · L € 30k.")
+        time_limit = st.slider("CP-SAT time limit (s)", 2, 30, 10)
 
 scenario_preview = build_scenario(seed, n_vessels, n_berths, n_tanks,
                                   horizon_days, congestion, dem_scale)
@@ -267,23 +287,19 @@ with st.sidebar:
                         help="Simulate a late arrival and watch the plan re-optimize.")
     delay_h = st.slider("Delay (hours)", 2, 36, 12) if pick != "— none —" else 0
 
-    st.markdown("#### Solver")
-    time_limit = st.slider("CP-SAT time limit (s)", 2, 30, 10)
-    st.caption("Instances this size usually solve to proven optimality in well under a second.")
-
 disrupted = None if pick == "— none —" else pick
-scenario, opt, base = solve_all(seed, n_vessels, n_berths, n_tanks, horizon_days,
-                                congestion, dem_scale, disrupted, delay_h, time_limit)
+scenario, opt, base, opt0, frozen = solve_all(
+    seed, n_vessels, n_berths, n_tanks, horizon_days,
+    congestion, dem_scale, disrupted, delay_h, time_limit)
 
 # ----------------------------------------------------------------------------- header
 st.markdown(
     """
     <div class="hero">
       <h1>⚓ PortOpt — Terminal Scheduling Optimizer</h1>
-      <p>Decision support for liquid-bulk tank terminals. A CP-SAT optimization model
-      assigns every incoming vessel a <b>berth</b>, a <b>storage tank</b> and a
-      <b>start time</b> — minimising demurrage and tank-cleaning cost under real
-      operational constraints, and benchmarked against a first-come-first-served plan.</p>
+      <p>Decision support for a Rotterdam-style chemical terminal: the optimizer gives
+      every vessel a <b>berth</b>, a <b>tank</b> and a <b>start time</b> — at minimal
+      cost — and shows what that saves versus planning by hand.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -296,26 +312,42 @@ if base["status"] != "FCFS":
     st.error("Baseline could not find a feasible plan — try another seed.")
     st.stop()
 
-if disrupted:
-    st.warning(f"⚠️ Disruption active: **{disrupted}** arrives **{delay_h} h late** — "
-               "both plans below are computed on the disrupted ETAs.")
-
 k_opt = kpis.compute(opt["entries"], scenario)
 k_base = kpis.compute(base["entries"], scenario)
 
-c1, c2, c3, c4, c5 = st.columns(5)
+if disrupted and opt0 and frozen:
+    k0 = kpis.compute(opt0["entries"], scenario)
+    k_frozen = kpis.compute(frozen["entries"], scenario)
+    st.warning(f"⚠️ **{disrupted}** arrives **{delay_h} h late**. "
+               "What does the disruption do to the plan?")
+    d1, d2, d3 = st.columns(3)
+    d1.metric("Original plan (no disruption)", eur(k0["total"]))
+    d2.metric("Stick to the old schedule", eur(k_frozen["total"]),
+              delta=f"{k_frozen['total'] - k0['total']:+,.0f} € disruption impact",
+              delta_color="inverse")
+    d3.metric("Re-optimized plan", eur(k_opt["total"]),
+              delta=f"{k_opt['total'] - k_frozen['total']:+,.0f} € vs old schedule",
+              delta_color="inverse")
+    replan_gain = k_frozen["total"] - k_opt["total"]
+    if replan_gain > 0.5:
+        st.success(f"♻️ Re-optimizing after the disruption saves **{eur(replan_gain)}** "
+                   "compared to executing the original schedule anyway.")
+    if k_opt["total"] < k0["total"] - 0.5:
+        st.caption("ℹ️ Total cost can end up *below* the original plan: waiting is paid "
+                   "from actual arrival, so a vessel that turns up after the congestion "
+                   "peak simply queues less.")
+    st.divider()
+
+c1, c2, c3 = st.columns(3)
 c1.metric("Total plan cost", eur(k_opt["total"]),
-          delta=f"{k_opt['total'] - k_base['total']:+,.0f} € vs FCFS", delta_color="inverse")
-c2.metric("Waiting time", f"{k_opt['wait_h']:,.1f} h",
-          delta=f"{k_opt['wait_h'] - k_base['wait_h']:+,.1f} h vs FCFS", delta_color="inverse")
-c3.metric("Demurrage", eur(k_opt["demurrage"]),
-          delta=f"{k_opt['demurrage'] - k_base['demurrage']:+,.0f} € vs FCFS",
+          delta=f"{k_opt['total'] - k_base['total']:+,.0f} € vs first-come-first-served",
           delta_color="inverse")
-c4.metric("Tank cleanings", f"{k_opt['n_clean']}",
-          delta=f"{k_opt['n_clean'] - k_base['n_clean']:+d} vs FCFS", delta_color="inverse")
-c5.metric("Berth utilization", f"{k_opt['utilization'] * 100:.0f}%",
-          delta=f"{(k_opt['utilization'] - k_base['utilization']) * 100:+.0f} pp vs FCFS",
-          delta_color="off")
+c2.metric("Waiting time", f"{k_opt['wait_h']:,.1f} h",
+          delta=f"{k_opt['wait_h'] - k_base['wait_h']:+,.1f} h vs first-come-first-served",
+          delta_color="inverse")
+c3.metric("Tank cleanings", f"{k_opt['n_clean']}",
+          delta=f"{k_opt['n_clean'] - k_base['n_clean']:+d} vs first-come-first-served",
+          delta_color="inverse")
 
 saved = k_base["total"] - k_opt["total"]
 if saved > 0.5:
@@ -331,7 +363,7 @@ else:
             "or add vessels to see the optimizer earn its keep.")
 
 tab_plan, tab_vs, tab_data, tab_how = st.tabs(
-    ["🗓️ Optimized plan", "⚖️ vs. First-come-first-served", "📦 Scenario data", "🧠 Under the hood"]
+    ["🗓️ The plan", "⚖️ Optimizer vs. human", "📦 Scenario", "🧠 How it works"]
 )
 
 # ----------------------------------------------------------------------------- plan tab
@@ -341,12 +373,12 @@ with tab_plan:
         f"objective {eur(opt['objective_eur'])} · plan start {T0:%a %d %b %H:%M}"
     )
     st.subheader("Vessel timeline")
-    st.plotly_chart(vessel_gantt(opt["entries"]), use_container_width=True)
-    st.subheader("Berth occupation")
-    st.plotly_chart(berth_gantt(opt["entries"], scenario), use_container_width=True)
-    st.subheader("Tank allocation")
-    st.caption("Hatched = volume moving this week · 🧽 = cleaning required before use.")
-    st.plotly_chart(tank_chart(scenario, opt["entries"]), use_container_width=True)
+    st.plotly_chart(vessel_gantt(opt["entries"]))
+    with st.expander("⚓ Berth occupation — which vessel lies where"):
+        st.plotly_chart(berth_gantt(opt["entries"], scenario))
+    with st.expander("🛢️ Tank allocation — stock, flows and cleanings"):
+        st.caption("Hatched = volume moving this week · 🧽 = cleaning required before use.")
+        st.plotly_chart(tank_chart(scenario, opt["entries"]))
     st.subheader("Schedule")
     schedule_table(opt["entries"])
 
@@ -359,7 +391,7 @@ with tab_vs:
     )
     left, right = st.columns(2)
     with left:
-        st.plotly_chart(cost_bar(k_base, k_opt), use_container_width=True)
+        st.plotly_chart(cost_bar(k_base, k_opt))
     with right:
         b = {e["vessel"]: e for e in base["entries"]}
         o = {e["vessel"]: e for e in opt["entries"]}
@@ -375,10 +407,10 @@ with tab_vs:
             }
             for name in sorted(b, key=lambda n: b[n]["eta"])
         ]
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True,
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True,
                      height=330)
-    st.subheader("The FCFS plan, for comparison")
-    st.plotly_chart(vessel_gantt(base["entries"]), use_container_width=True)
+    with st.expander("📅 The first-come-first-served plan as a timeline"):
+        st.plotly_chart(vessel_gantt(base["entries"]))
 
 # ----------------------------------------------------------------------------- data tab
 with tab_data:
@@ -394,7 +426,7 @@ with tab_data:
         }
         for v in scenario.vessels
     ])
-    st.dataframe(vdf, use_container_width=True, hide_index=True)
+    st.dataframe(vdf, width="stretch", hide_index=True)
 
     st.subheader(f"Storage tanks ({len(scenario.tanks)})")
     tdf = pd.DataFrame([
@@ -408,7 +440,7 @@ with tab_data:
         for t in scenario.tanks
     ])
     st.dataframe(
-        tdf, use_container_width=True, hide_index=True,
+        tdf, width="stretch", hide_index=True,
         column_config={"Fill": st.column_config.ProgressColumn(
             "Fill", format="%d%%", min_value=0, max_value=100)},
     )
@@ -418,7 +450,7 @@ with tab_data:
         {"Berth": b.name, "Max vessel class": b.max_size, "Pump rate (m³/h)": b.pump_rate}
         for b in scenario.berths
     ])
-    st.dataframe(bdf, use_container_width=True, hide_index=True)
+    st.dataframe(bdf, width="stretch", hide_index=True)
 
 # ----------------------------------------------------------------------------- how tab
 with tab_how:
@@ -505,7 +537,8 @@ model.Minimize(sum(wait * demurrage_rate) + sum(y * cleaning_cost))
 
 st.markdown(
     """<div class="footer">PortOpt · OR-Tools CP-SAT + Streamlit · all data synthetic ·
+    inspired by chemical terminals in the Rotterdam Botlek area (such as Vopak Botlek) ·
     built by Ismail Arslan as an Operations Research portfolio demo — not affiliated
-    with any terminal operator.</div>""",
+    with or endorsed by any terminal operator.</div>""",
     unsafe_allow_html=True,
 )

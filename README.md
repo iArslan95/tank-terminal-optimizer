@@ -6,19 +6,22 @@
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
 An interactive **Operations Research** demo: a CP-SAT optimization model that
-assigns every vessel calling at a liquid-bulk tank terminal a **berth**, a
+assigns every vessel calling at a chemical tank terminal a **berth**, a
 **storage tank** and a **start time** — minimising demurrage and tank-cleaning
 cost under real operational constraints — wrapped in a Streamlit decision-support
-UI and benchmarked against a first-come-first-served plan.
+UI and benchmarked against a first-come-first-served plan. The scenario is
+modelled after chemical terminals in the Rotterdam **Botlek** area (such as
+Vopak Botlek); all data is synthetic and the project is not affiliated with
+any terminal operator.
 
 ## Why
 
-Picture a Tuesday morning at a Rotterdam tank terminal. Five tankers sit at
-anchorage; one must discharge gasoline, another loads diesel, a third carries a
-chemical that only goes into a cleaned, coated tank. There are a handful of
-jetties and dozens of tanks, half of them full or reserved. Every hour a vessel
-waits costs serious demurrage money. The number of feasible plans runs into the
-billions — far beyond what any planner can weigh by hand.
+Picture a Tuesday morning at a Rotterdam chemical terminal. Five tankers sit at
+anchorage; one must discharge methanol, another loads styrene, a third carries
+acrylonitrile that only goes into a cleaned stainless tank. There are a handful
+of jetties and dozens of tanks, half of them full or reserved. Every hour a
+vessel waits costs serious demurrage money. The number of feasible plans runs
+into the billions — far beyond what any planner can weigh by hand.
 
 That is an optimization problem. This repo turns it into mathematics and lets a
 solver find the **provably best** plan in seconds, then shows the planner what
@@ -32,14 +35,19 @@ it decided and why — the essence of a decision support system.
   the € saved (demurrage + cleaning), waiting hours and berth utilization.
 - **Visualizes** the plan: vessel timeline with waiting bars and ETA markers,
   berth occupation Gantt, and tank capacity/flow charts.
-- **What-if analysis**: delay any vessel by X hours and watch the plan
-  re-optimize — the core loop of operational decision support.
+- **What-if analysis**: delay any vessel by X hours and compare three plans —
+  the original optimum, stubbornly executing the old schedule, and the
+  re-optimized plan. The gap between the last two is the euro value of
+  re-planning: the core loop of operational decision support.
 - **Explains itself**: a model tab with the MILP-style formulation, the CP-SAT
   code, solver telemetry and a production roadmap.
 
 All data is **synthetic** (generated per random seed, guaranteed feasible) but
-realistic in magnitude: vessel classes, pump rates, product families
-(CPP / chemicals / biofuels), tank linings, cleaning times and demurrage rates.
+realistic in magnitude: vessel classes, pump rates, a Botlek-style product
+slate (methanol, MEG, styrene, acrylonitrile, caustic, aromatics, biofuels),
+tank linings, cleaning times and demurrage rates. Vessel names are real
+chemical-tanker names from fleets that call at Rotterdam (Stolt, Odfjell,
+Essberger) — flavour only, with no real schedules or cargoes attached.
 
 ## The optimization model
 
@@ -85,7 +93,9 @@ optimizer/
   model.py              CP-SAT model: berth + tank + sequencing, cost objective
   baseline.py           first-come-first-served benchmark planner
   kpis.py               shared KPI computation (one yardstick for both plans)
-scripts/selftest.py     multi-seed smoke test (optimizer must never lose to FCFS)
+scripts/selftest.py     multi-seed smoke test (optimizer never loses to FCFS,
+                        re-optimizing never loses to freezing the old plan)
+scripts/ui_test.py      headless UI test via streamlit.testing (AppTest)
 ```
 
 ## From demo to production
@@ -99,6 +109,8 @@ scripts/selftest.py     multi-seed smoke test (optimizer must never lose to FCFS
 
 ## Disclaimer
 
-Educational portfolio project. All data is synthetic; no real terminal,
-customer or vessel data is used. Not affiliated with or endorsed by any
-terminal operator.
+Educational portfolio project, inspired by chemical terminals in the Rotterdam
+Botlek area (such as Vopak Botlek). All scenario data is synthetic; vessel
+names are real tanker names used as flavour only, with no real schedules,
+cargoes, terminals or customer data involved. Not affiliated with or endorsed
+by any terminal operator or shipping company.
