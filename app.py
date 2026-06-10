@@ -341,13 +341,19 @@ if disrupted and opt0 and frozen:
     st.warning(f"⚠️ **{disrupted}** arrives **{delay_h} h late**. "
                "What does the disruption do to the plan?")
     d1, d2, d3 = st.columns(3)
-    d1.metric("Original plan (no disruption)", eur(k0["total"]))
+    d1.metric("Original plan (no disruption)", eur(k0["total"]),
+              help="The optimal plan computed on the original, undisrupted ETAs.")
     d2.metric("Stick to the old schedule", eur(k_frozen["total"]),
               delta=f"{k_frozen['total'] - k0['total']:+,.0f} € disruption impact",
-              delta_color="inverse")
+              delta_color="inverse",
+              help="The original schedule executed against the new ETA — same berths, "
+                   "tanks and order, only the clock shifts. This is the cost of NOT "
+                   "re-planning.")
     d3.metric("Re-optimized plan", eur(k_opt["total"]),
               delta=f"{k_opt['total'] - k_frozen['total']:+,.0f} € vs old schedule",
-              delta_color="inverse")
+              delta_color="inverse",
+              help="The best achievable plan given the disruption, re-solved from "
+                   "scratch by CP-SAT.")
     replan_gain = k_frozen["total"] - k_opt["total"]
     if replan_gain > 0.5:
         st.success(f"♻️ Re-optimizing after the disruption saves **{eur(replan_gain)}** "
@@ -361,13 +367,19 @@ if disrupted and opt0 and frozen:
 c1, c2, c3 = st.columns(3)
 c1.metric("Total plan cost", eur(k_opt["total"]),
           delta=f"{k_opt['total'] - k_base['total']:+,.0f} € vs first-come-first-served",
-          delta_color="inverse")
+          delta_color="inverse",
+          help="Demurrage + tank-cleaning cost of the optimized plan. The delta "
+               "compares against a first-come-first-served plan of the same scenario.")
 c2.metric("Waiting time", f"{k_opt['wait_h']:,.1f} h",
           delta=f"{k_opt['wait_h'] - k_base['wait_h']:+,.1f} h vs first-come-first-served",
-          delta_color="inverse")
+          delta_color="inverse",
+          help="Total hours all vessels spend waiting at anchorage before a berth "
+               "is ready for them.")
 c3.metric("Tank cleanings", f"{k_opt['n_clean']}",
           delta=f"{k_opt['n_clean'] - k_base['n_clean']:+d} vs first-come-first-served",
-          delta_color="inverse")
+          delta_color="inverse",
+          help="Tanks that must be cleaned before use because the incoming product "
+               "differs from the residue of the previous one.")
 
 saved = k_base["total"] - k_opt["total"]
 if saved > 0.5:
@@ -392,14 +404,23 @@ with tab_plan:
         f"Solver: CP-SAT · status **{opt['status']}** · {opt['wall_time_s']:.2f}s wall time · "
         f"objective {eur(opt['objective_eur'])} · plan start {T0:%a %d %b %H:%M}"
     )
-    st.subheader("Vessel timeline")
+    st.subheader("Vessel timeline",
+                 help="One row per vessel, in arrival order. ♦ = nominated ETA · grey "
+                      "hatched = waiting at anchorage · coloured bar = pumping at the "
+                      "berth (colour = product). Hover any bar for volume, berth and tank.")
     st.plotly_chart(vessel_gantt(opt["entries"]))
     with st.expander("⚓ Berth occupation — which vessel lies where"):
+        st.caption("One row per jetty (label shows its pump rate). Bars never overlap: "
+                   "one vessel per berth at a time is a hard constraint.")
         st.plotly_chart(berth_gantt(opt["entries"], scenario))
     with st.expander("🛢️ Tank allocation — stock, flows and cleanings"):
-        st.caption("Hatched = volume moving this week · 🧽 = cleaning required before use.")
+        st.caption("Per tank: solid = stock that stays · ✕-hatched = loaded onto a vessel "
+                   "· ╱-hatched = discharged into the tank · faint = free space after the "
+                   "plan. 🧽 = cleaning required before use.")
         st.plotly_chart(tank_chart(scenario, opt["entries"]))
-    st.subheader("Schedule")
+    st.subheader("Schedule",
+                 help="The executable plan: berth, tank and timing per vessel, plus "
+                      "waiting hours and their demurrage cost. 🧽 = tank cleaned first.")
     schedule_table(opt["entries"])
 
 # ----------------------------------------------------------------------------- compare tab
@@ -411,8 +432,15 @@ with tab_vs:
     )
     left, right = st.columns(2)
     with left:
+        st.subheader("Cost comparison",
+                     help="Total plan cost stacked by component — demurrage (waiting) "
+                          "and tank cleanings. The gap between the bars is what "
+                          "optimization earns this week.")
         st.plotly_chart(cost_bar(k_base, k_opt))
     with right:
+        st.subheader("Per-vessel impact",
+                     help="Waiting hours under both plans and the € saved per vessel "
+                          "(demurrage + cleaning differences).")
         b = {e["vessel"]: e for e in base["entries"]}
         o = {e["vessel"]: e for e in opt["entries"]}
         rows = [
@@ -430,13 +458,18 @@ with tab_vs:
         st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True,
                      height=330)
     with st.expander("📅 The first-come-first-served plan as a timeline"):
+        st.caption("Same scenario, planned strictly in arrival order — typically more "
+                   "grey (waiting) than the optimized timeline on the first tab.")
         st.plotly_chart(vessel_gantt(base["entries"]))
 
 # ----------------------------------------------------------------------------- data tab
 with tab_data:
     st.caption(f"All synthetic, generated from seed {seed}. "
                "Regenerate via the sidebar — every scenario is guaranteed feasible.")
-    st.subheader(f"Vessels ({len(scenario.vessels)})")
+    st.subheader(f"Vessels ({len(scenario.vessels)})",
+                 help="This week's nominations: arrival time (ETA), operation "
+                      "(discharge or load), product, volume and each vessel's "
+                      "demurrage rate per day of waiting.")
     vdf = pd.DataFrame([
         {
             "Vessel": v.name, "Class": v.size,
@@ -448,7 +481,11 @@ with tab_data:
     ])
     st.dataframe(vdf, width="stretch", hide_index=True)
 
-    st.subheader(f"Storage tanks ({len(scenario.tanks)})")
+    st.subheader(f"Storage tanks ({len(scenario.tanks)})",
+                 help="Current tank state. The lining limits which product families "
+                      "are allowed; Residue = last product in an empty tank (a "
+                      "different incoming product means cleaning first); Fill = "
+                      "current level vs capacity.")
     tdf = pd.DataFrame([
         {
             "Tank": t.name, "Lining": t.lining, "Capacity (m³)": t.capacity,
@@ -465,7 +502,9 @@ with tab_data:
             "Fill", format="%d%%", min_value=0, max_value=100)},
     )
 
-    st.subheader(f"Berths ({len(scenario.berths)})")
+    st.subheader(f"Berths ({len(scenario.berths)})",
+                 help="The jetties: the largest vessel class each can take and its "
+                      "pump rate — which drives how long a vessel occupies the berth.")
     bdf = pd.DataFrame([
         {"Berth": b.name, "Max vessel class": b.max_size, "Pump rate (m³/h)": b.pump_rate}
         for b in scenario.berths
