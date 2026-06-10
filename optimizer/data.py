@@ -27,16 +27,16 @@ class Product:
 
 
 PRODUCTS = (
-    Product("Xylenes", "CPP", "#f59e0b"),
-    Product("Toluene", "CPP", "#facc15"),
-    Product("Pygas", "CPP", "#fb7185"),
-    Product("Methanol", "CHEM", "#34d399"),
-    Product("MEG", "CHEM", "#2dd4bf"),
-    Product("Styrene", "CHEM", "#a78bfa"),
-    Product("Acrylonitrile", "CHEM", "#f472b6"),
-    Product("Caustic soda 50%", "CHEM", "#60a5fa"),
-    Product("Ethanol", "BIO", "#22d3ee"),
-    Product("UCOME biodiesel", "BIO", "#4ade80"),
+    Product("Xylenes", "CPP", "#e09f3e"),
+    Product("Toluene", "CPP", "#9c6644"),
+    Product("Pygas", "CPP", "#c1666b"),
+    Product("Methanol", "CHEM", "#2a9d8f"),
+    Product("MEG", "CHEM", "#457b9d"),
+    Product("Styrene", "CHEM", "#7c6ba0"),
+    Product("Acrylonitrile", "CHEM", "#b56576"),
+    Product("Caustic soda 50%", "CHEM", "#6b705c"),
+    Product("Ethanol", "BIO", "#84a98c"),
+    Product("UCOME biodiesel", "BIO", "#588157"),
 )
 
 # Tank lining determines which product families a tank may legally hold.

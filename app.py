@@ -28,7 +28,7 @@ st.set_page_config(
 
 DEFAULT_SEED = 5
 WAIT_KIND = "Waiting at anchorage"
-WAIT_COLOR = "#64748b"
+WAIT_COLOR = "#9ca3af"
 PRODUCT_COLORS = {p.name: p.color for p in data.PRODUCTS}
 GANTT_COLORS = dict(PRODUCT_COLORS, **{WAIT_KIND: WAIT_COLOR})
 T0 = datetime.combine(date.today(), dtime(6, 0))
@@ -37,49 +37,48 @@ CSS = """
 <style>
 .block-container {padding-top: 1.4rem;}
 .hero {
-  background: linear-gradient(135deg, #0b3a5c 0%, #0e7490 60%, #155e75 100%);
-  border: 1px solid #1e5f8a; border-radius: 18px;
-  padding: 26px 30px; margin-bottom: 18px;
+  background: #ffffff;
+  border: 1px solid #e7e5e4; border-left: 4px solid #0f766e;
+  border-radius: 14px; padding: 26px 30px; margin-bottom: 18px;
 }
-.hero h1 {margin: 0; font-size: 1.9rem; color: #f0f9ff;}
-.hero p {margin: 8px 0 0; color: #bae6fd; font-size: 1.0rem; max-width: 90ch;}
+.hero h1 {margin: 0; font-size: 1.8rem; color: #1c1917; letter-spacing: -0.01em;}
+.hero p {margin: 8px 0 0; color: #78716c; font-size: 0.98rem; max-width: 90ch;}
 [data-testid="stMetric"] {
-  background: #11233b; border: 1px solid #1f3b5c;
-  border-radius: 14px; padding: 14px 16px;
+  background: #ffffff; border: 1px solid #e7e5e4;
+  border-radius: 12px; padding: 14px 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 .savings {
-  background: linear-gradient(90deg, #064e3b, #065f46);
-  border: 1px solid #10b981; color: #d1fae5;
-  padding: 14px 18px; border-radius: 14px;
-  font-size: 1.05rem; margin: 6px 0 14px;
+  background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;
+  padding: 13px 18px; border-radius: 12px;
+  font-size: 1.0rem; margin: 6px 0 14px;
 }
 .orcard {
-  background: #11233b; border: 1px solid #1f3b5c; border-radius: 14px;
+  background: #ffffff; border: 1px solid #e7e5e4; border-radius: 12px;
   padding: 16px 18px; height: 100%;
 }
-.orcard h4 {margin: 0 0 8px; color: #7dd3fc;}
-.orcard p {margin: 0; color: #cbd5e1; font-size: 0.92rem;}
-.footer {color: #64748b; font-size: 0.85rem; margin-top: 28px;}
+.orcard h4 {margin: 0 0 8px; color: #0f766e;}
+.orcard p {margin: 0; color: #57534e; font-size: 0.92rem;}
+.footer {color: #a8a29e; font-size: 0.85rem; margin-top: 28px;}
 /* Tabs styled as clearly clickable buttons */
-.stTabs [data-baseweb="tab-list"] {gap: 10px; padding: 2px 0 10px;}
+.stTabs [data-baseweb="tab-list"] {gap: 8px; padding: 2px 0 10px;}
 .stTabs [data-baseweb="tab"] {
-  background: #12233c; border: 1px solid #2a4a73; border-radius: 12px;
-  padding: 10px 20px; font-weight: 600; font-size: 1.0rem; color: #cbd5e1;
+  background: #ffffff; border: 1px solid #e7e5e4; border-radius: 10px;
+  padding: 9px 18px; font-weight: 600; font-size: 0.97rem; color: #57534e;
 }
-.stTabs [data-baseweb="tab"]:hover {border-color: #22d3ee; color: #e0f2fe;}
+.stTabs [data-baseweb="tab"]:hover {border-color: #0f766e; color: #0f766e;}
 .stTabs [aria-selected="true"] {
-  background: linear-gradient(135deg, #0e7490, #155e75);
-  border-color: #22d3ee; color: #f0f9ff;
+  background: #0f766e; border-color: #0f766e; color: #ffffff;
 }
 .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"] {display: none;}
 /* Plan Assistant panel */
-.chat-head {font-weight: 700; font-size: 1.05rem; color: #7dd3fc; margin-top: 4px;}
+.chat-head {font-weight: 700; font-size: 1.02rem; color: #0f766e; margin-top: 4px;}
 .stButton button {
   font-size: 0.85rem; text-align: left; width: 100%;
-  background: #12233c; border: 1px solid #2a4a73; border-radius: 10px;
-  color: #cbd5e1; padding: 6px 12px;
+  background: #ffffff; border: 1px solid #e7e5e4; border-radius: 10px;
+  color: #44403c; padding: 6px 12px;
 }
-.stButton button:hover {border-color: #22d3ee; color: #e0f2fe;}
+.stButton button:hover {border-color: #0f766e; color: #0f766e;}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -124,12 +123,12 @@ def style_fig(fig, height):
         height=height,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font_color="#cbd5e1",
+        font_color="#57534e",
         margin=dict(l=10, r=10, t=30, b=10),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, title=""),
     )
-    fig.update_xaxes(gridcolor="#1e293b", zeroline=False)
-    fig.update_yaxes(gridcolor="#1e293b", title="")
+    fig.update_xaxes(gridcolor="#e7e5e4", zeroline=False)
+    fig.update_yaxes(gridcolor="#e7e5e4", title="")
     return fig
 
 
@@ -156,8 +155,8 @@ def vessel_gantt(entries):
     fig.update_yaxes(categoryorder="array", categoryarray=labels, autorange="reversed")
     fig.add_trace(go.Scatter(
         x=[ts(e["eta"]) for e in ordered], y=labels, mode="markers",
-        marker=dict(symbol="diamond", size=10, color="#f8fafc",
-                    line=dict(color="#475569", width=1)),
+        marker=dict(symbol="diamond", size=10, color="#ffffff",
+                    line=dict(color="#44403c", width=1.5)),
         name="ETA (nominated)",
         hovertemplate="%{y} — ETA %{x|%a %H:%M}<extra></extra>",
     ))
@@ -201,13 +200,13 @@ def tank_chart(scenario, entries):
         label = f"{t.name} · {t.lining}" + (" 🧽" if e and e["clean"] else "")
         labels.append(label)
         rem_x.append(remaining)
-        rem_c.append(t.product.color if t.product else "#1e293b")
+        rem_c.append(t.product.color if t.product else "#d6d3d1")
         rem_t.append(f"{t.name}: {remaining:,} m³ {t.product.name if t.product else ''} remains")
         out_x.append(outgoing)
-        out_c.append(t.product.color if t.product else "#1e293b")
+        out_c.append(t.product.color if t.product else "#d6d3d1")
         out_t.append(f"{e['vessel']} loads {outgoing:,} m³ {e['product']}" if outgoing else "")
         inc_x.append(incoming)
-        inc_c.append(e["color"] if incoming else "#1e293b")
+        inc_c.append(e["color"] if incoming else "#d6d3d1")
         inc_t.append(
             f"{e['vessel']} discharges {incoming:,} m³ {e['product']}"
             + (f" — cleaning first ({t.clean_hours} h, {eur(t.clean_cost)})" if e and e["clean"] else "")
@@ -226,8 +225,8 @@ def tank_chart(scenario, entries):
                 marker=dict(color=inc_c, pattern=dict(shape="/")),
                 hovertext=inc_t, hoverinfo="text")
     fig.add_bar(y=labels, x=free_x, orientation="h", name="Free capacity",
-                marker=dict(color="rgba(148,163,184,0.12)",
-                            line=dict(color="#1f3b5c", width=1)),
+                marker=dict(color="rgba(120,113,108,0.06)",
+                            line=dict(color="#e7e5e4", width=1)),
                 hovertext=free_t, hoverinfo="text")
     fig.update_layout(barmode="stack")
     fig.update_xaxes(title="m³")
@@ -242,7 +241,7 @@ def cost_bar(k_base, k_opt):
         {"Plan": "Optimized (CP-SAT)", "Component": "Tank cleaning", "EUR": k_opt["cleaning"]},
     ])
     fig = px.bar(df, x="Plan", y="EUR", color="Component", barmode="stack", text_auto=".2s",
-                 color_discrete_map={"Demurrage": "#f59e0b", "Tank cleaning": "#22d3ee"})
+                 color_discrete_map={"Demurrage": "#e09f3e", "Tank cleaning": "#2a9d8f"})
     return style_fig(fig, 340)
 
 
@@ -276,7 +275,7 @@ def render_chat(scenario, opt, base, k_opt, k_base, settings, disruption):
     with box:
         if not history:
             st.markdown(
-                "<small style='color:#94a3b8'>I can explain every number on this "
+                "<small style='color:#a8a29e'>I can explain every number on this "
                 "page — the schedule, the savings, the constraints. Try a "
                 "suggestion below or ask your own question.</small>",
                 unsafe_allow_html=True,
